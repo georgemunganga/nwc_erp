@@ -1,0 +1,961 @@
+@extends('layouts.admin')
+@section('page-title')
+    {{__('Manage Employee Salary')}} - {{ $employee->name }}
+@endsection
+@section('breadcrumb')
+    <li class="breadcrumb-item"><a href="{{route('dashboard')}}">{{__('Dashboard')}}</a></li>
+    <li class="breadcrumb-item"><a href="{{route('setsalary.index')}}">{{__('Set Salary')}}</a></li>
+    <li class="breadcrumb-item">{{ $employee->name }}</li>
+@endsection
+
+@push('css-page')
+<style>
+    .salary-summary-card {
+        border-left: 4px solid;
+        transition: all 0.3s ease;
+    }
+    .salary-summary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .salary-summary-card.earnings {
+        border-left-color: #28a745;
+    }
+    .salary-summary-card.deductions {
+        border-left-color: #dc3545;
+    }
+    .salary-summary-card.net-salary {
+        border-left-color: #007bff;
+    }
+    .salary-summary-card .summary-icon {
+        font-size: 2.5rem;
+        opacity: 0.2;
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    .nav-tabs .nav-link {
+        border-radius: 8px 8px 0 0;
+        padding: 12px 20px;
+        font-weight: 500;
+        color: #6c757d;
+        border: none;
+        background: transparent;
+        margin-right: 5px;
+    }
+    .nav-tabs .nav-link:hover {
+        background: rgba(0,123,255,0.05);
+        color: #007bff;
+    }
+    .nav-tabs .nav-link.active {
+        background: #fff;
+        color: #007bff;
+        border-bottom: 3px solid #007bff;
+    }
+    .form-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .form-section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #dee2e6;
+    }
+    .help-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    .employee-header-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 25px;
+        margin-bottom: 25px;
+    }
+    .employee-header-card .employee-info span {
+        background: rgba(255,255,255,0.2);
+        padding: 5px 12px;
+        border-radius: 20px;
+        margin-right: 10px;
+        margin-bottom: 8px;
+        display: inline-block;
+    }
+    .table-card-header {
+        background: #f8f9fa;
+        padding: 15px 20px;
+        border-radius: 8px 8px 0 0;
+        font-weight: 600;
+        color: #495057;
+        border-bottom: 2px solid #dee2e6;
+    }
+    .add-item-section {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 25px;
+        border-radius: 12px;
+        margin-bottom: 25px;
+        border: 2px dashed #dee2e6;
+    }
+    .data-table-section {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .badge-status {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    .btn-create {
+        padding: 10px 24px;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    .btn-create:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,123,255,0.3);
+    }
+</style>
+@endpush
+
+@section('content')
+@php
+    $defaultSalary = request('salary', $employee->salary);
+    $defaultPayslipType = request('salary_type', $employee->salary_type);
+
+    // Calculate totals
+    $totalAllowances = $allowances->sum('amount');
+    $totalCommissions = $commissions->sum('amount');
+    $totalLoans = $loans->sum('amount');
+    $totalDeductions = $saturationdeductions->sum('amount');
+    $totalOtherPayments = $otherpayments->sum('amount');
+    $totalOvertimeAmount = $overtimes->sum(function($overtime) {
+        return $overtime->number_of_days * $overtime->hours * $overtime->rate;
+    });
+
+    $grossSalary = $defaultSalary + $totalAllowances + $totalCommissions + $totalOtherPayments + $totalOvertimeAmount;
+    $totalDeductionsAmount = $totalLoans + $totalDeductions;
+    $netSalary = $grossSalary - $totalDeductionsAmount;
+@endphp
+
+<!-- Employee Header Card -->
+<div class="employee-header-card">
+    <div class="row align-items-center">
+        <div class="col-md-8">
+            <h3 class="mb-3" style="font-weight: 600;">{{ $employee->name }}</h3>
+            <div class="employee-info">
+                <span><i class="ti ti-id me-1"></i>{{ \Auth::user()->employeeIdFormat($employee->employee_id) }}</span>
+                @if($employee->email)
+                    <span><i class="ti ti-mail me-1"></i>{{ $employee->email }}</span>
+                @endif
+                @if($employee->branch)
+                    <span><i class="ti ti-building me-1"></i>{{ $employee->branch->name }}</span>
+                @endif
+                @if($employee->department)
+                    <span><i class="ti ti-briefcase me-1"></i>{{ $employee->department->name }}</span>
+                @endif
+                @if($employee->designation)
+                    <span><i class="ti ti-user-check me-1"></i>{{ $employee->designation->name }}</span>
+                @endif
+            </div>
+        </div>
+        <div class="col-md-4 text-end">
+            <div style="font-size: 0.9rem; opacity: 0.9;">{{__('Net Salary')}}</div>
+            <h2 style="font-weight: 700; margin-top: 5px;">{{ \Auth::user()->priceFormat($netSalary) }}</h2>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card salary-summary-card earnings mb-3">
+            <div class="card-body position-relative">
+                <i class="ti ti-trending-up summary-icon"></i>
+                <div style="position: relative; z-index: 1;">
+                    <small class="text-muted d-block mb-1">{{__('Basic Salary')}}</small>
+                    <h4 class="mb-0" style="color: #28a745; font-weight: 600;">{{ \Auth::user()->priceFormat($defaultSalary) }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card salary-summary-card earnings mb-3">
+            <div class="card-body position-relative">
+                <i class="ti ti-plus summary-icon"></i>
+                <div style="position: relative; z-index: 1;">
+                    <small class="text-muted d-block mb-1">{{__('Total Additions')}}</small>
+                    <h4 class="mb-0" style="color: #28a745; font-weight: 600;">{{ \Auth::user()->priceFormat($totalAllowances + $totalCommissions + $totalOtherPayments + $totalOvertimeAmount) }}</h4>
+                    <small class="text-muted">{{__('Allowances, Commissions, Overtime')}}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card salary-summary-card deductions mb-3">
+            <div class="card-body position-relative">
+                <i class="ti ti-minus summary-icon"></i>
+                <div style="position: relative; z-index: 1;">
+                    <small class="text-muted d-block mb-1">{{__('Total Deductions')}}</small>
+                    <h4 class="mb-0" style="color: #dc3545; font-weight: 600;">{{ \Auth::user()->priceFormat($totalDeductionsAmount) }}</h4>
+                    <small class="text-muted">{{__('Loans, Deductions')}}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card salary-summary-card net-salary mb-3">
+            <div class="card-body position-relative">
+                <i class="ti ti-wallet summary-icon"></i>
+                <div style="position: relative; z-index: 1;">
+                    <small class="text-muted d-block mb-1">{{__('Gross Salary')}}</small>
+                    <h4 class="mb-0" style="color: #007bff; font-weight: 600;">{{ \Auth::user()->priceFormat($grossSalary) }}</h4>
+                    <small class="text-muted">{{__('Before Deductions')}}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs Section -->
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body p-0">
+                <ul class="nav nav-tabs" style="padding: 20px 20px 0 20px; background: #f8f9fa; margin: 0; border-bottom: 2px solid #dee2e6;">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-toggle="tab" href="#salary">
+                            <i class="ti ti-currency-dollar me-1"></i>{{__('Basic Salary')}}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#allowance">
+                            <i class="ti ti-gift me-1"></i>{{__('Allowances')}}
+                            <span class="badge bg-success ms-1">{{ $allowances->count() }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#commission">
+                            <i class="ti ti-percentage me-1"></i>{{__('Commissions')}}
+                            <span class="badge bg-success ms-1">{{ $commissions->count() }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#loan">
+                            <i class="ti ti-credit-card me-1"></i>{{__('Loans')}}
+                            <span class="badge bg-danger ms-1">{{ $loans->count() }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#saturation-deduction">
+                            <i class="ti ti-minus-vertical me-1"></i>{{__('Deductions')}}
+                            <span class="badge bg-danger ms-1">{{ $saturationdeductions->count() }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#other-payment">
+                            <i class="ti ti-coin me-1"></i>{{__('Other Payments')}}
+                            <span class="badge bg-info ms-1">{{ $otherpayments->count() }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#overtime">
+                            <i class="ti ti-clock me-1"></i>{{__('Overtime')}}
+                            <span class="badge bg-warning ms-1">{{ $overtimes->count() }}</span>
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="tab-content p-4">
+                    <!-- Basic Salary Tab -->
+                    <div id="salary" class="tab-pane fade show active">
+                        <div class="form-section">
+                            <div class="form-section-title">
+                                <i class="ti ti-currency-dollar me-2"></i>{{__('Configure Basic Salary Information')}}
+                            </div>
+                            {{ Form::model($employee, array('route' => array('employee.salary.update', $employee->id), 'method' => 'POST')) }}
+                            <div class="row">
+                                <div class="col-12 col-md-6">
+                                    <div class="form-group mb-3">
+                                        {{ Form::label('salary_type', __('Payslip Type'),['class'=>'form-label']) }}
+                                        <span class="text-danger">*</span>
+                                        {{ Form::select('salary_type',$payslip_type,$defaultPayslipType, array('class' => 'form-control select2','required'=>'required')) }}
+                                        <small class="help-text">{{__('Select the type of payslip for this employee')}}</small>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="form-group mb-3">
+                                        {{ Form::label('salary', __('Monthly Salary'),['class'=>'form-label']) }}
+                                        <span class="text-danger">*</span>
+                                        {{ Form::number('salary',$defaultSalary, array('class' => 'form-control','required'=>'required','step'=>'0.01','placeholder'=>'Enter monthly salary amount')) }}
+                                        <small class="help-text">{{__('Enter the base monthly salary amount')}}</small>
+                                    </div>
+                                </div>
+                            </div>
+                            @can('create set salary')
+                                <div class="row">
+                                    <div class="col-12 text-end">
+                                        <button type="submit" class="btn btn-primary btn-create">
+                                            <i class="ti ti-device-floppy me-1"></i>{{__('Save Changes')}}
+                                        </button>
+                                    </div>
+                                </div>
+                            @endcan
+                            {{Form::close()}}
+                        </div>
+                    </div>
+                    <!-- Allowances Tab -->
+                    <div id="allowance" class="tab-pane fade">
+                        <div class="add-item-section">
+                            <div class="form-section-title">
+                                <i class="ti ti-plus me-2"></i>{{__('Add New Allowance')}}
+                            </div>
+                            {{Form::open(array('url'=>'allowance','method'=>'post'))}}
+                            @csrf
+                            {{ Form::hidden('employee_id',$employee->id, array()) }}
+                            <div class="row">
+                                <div class="col-12 col-md-4">
+                                    <div class="form-group mb-3">
+                                        {{ Form::label('allowance_option', __('Allowance Type'),['class'=>'form-label']) }}
+                                        <span class="text-danger">*</span>
+                                        {{ Form::select('allowance_option',$allowance_options,null, array('class' => 'form-control select2','required'=>'required')) }}
+                                        <small class="help-text">{{__('Select the type of allowance (e.g., Housing, Transport)')}}</small>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="form-group mb-3">
+                                        {{ Form::label('title', __('Allowance Title'),['class'=>'form-label']) }}
+                                        <span class="text-danger">*</span>
+                                        {{ Form::text('title',null, array('class' => 'form-control','required'=>'required','placeholder'=>'e.g., Monthly Housing Allowance')) }}
+                                        <small class="help-text">{{__('Provide a descriptive title for this allowance')}}</small>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="form-group mb-3">
+                                        {{ Form::label('amount', __('Amount'),['class'=>'form-label']) }}
+                                        <span class="text-danger">*</span>
+                                        {{ Form::number('amount',null, array('class' => 'form-control','required'=>'required','step'=>'0.01','placeholder'=>'0.00')) }}
+                                        <small class="help-text">{{__('Enter the allowance amount')}}</small>
+                                    </div>
+                                </div>
+                            </div>
+                            @can('create allowance')
+                                <div class="row">
+                                    <div class="col-12 text-end">
+                                        <button type="submit" class="btn btn-success btn-create">
+                                            <i class="ti ti-plus me-1"></i>{{__('Add Allowance')}}
+                                        </button>
+                                    </div>
+                                </div>
+                            @endcan
+                            {{Form::close()}}
+                        </div>
+
+                        <div class="data-table-section">
+                            <div class="table-card-header">
+                                <i class="ti ti-list me-2"></i>{{__('Current Allowances')}}
+                                <span class="badge bg-success ms-2">{{ $allowances->count() }} {{__('Items')}}</span>
+                            </div>
+                            <div class="p-3">
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0" id="allowance-dataTable">
+                                        <thead class="bg-light">
+                                        <tr>
+                                            <th>{{__('Employee Name')}}</th>
+                                            <th>{{__('Allownace Option')}}</th>
+                                            <th>{{__('Title')}}</th>
+                                            <th>{{__('Amount')}}</th>
+                                            <th width="200px">{{__('Action')}}</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody class="font-style">
+                                        @foreach ($allowances as $allowance)
+                                            <tr>
+                                                <td>{{ $allowance->employee()->name }}</td>
+                                                <td>{{ $allowance->allowance_option()->name }}</td>
+                                                <td>{{ $allowance->title }}</td>
+                                                <td>{{  \Auth::user()->priceFormat($allowance->amount) }}</td>
+                                                @can('delete set salary')
+                                                    <td>
+                                                        @can('edit allowance')
+                                                            <a href="#" data-url="{{ URL::to('allowance/'.$allowance->id.'/edit') }}" data-size="lg" data-ajax-popup="true" data-title="{{__('Edit Allowance')}}" class="edit-icon" data-toggle="tooltip" data-original-title="{{__('Edit')}}"><i class="ti ti-pencil text-white"></i></a>
+                                                        @endcan
+                                                        @can('delete allowance')
+                                                            <a href="#" class="delete-icon" data-toggle="tooltip" data-original-title="{{__('Delete')}}" data-confirm="{{__('Are You Sure?').'|'.__('This action can not be undone. Do you want to continue?')}}" data-confirm-yes="document.getElementById('allowance-delete-form-{{$allowance->id}}').submit();"><i class="ti ti-trash"></i></a>
+                                                            {!! Form::open(['method' => 'DELETE', 'route' => ['allowance.destroy', $allowance->id],'id'=>'allowance-delete-form-'.$allowance->id]) !!}
+                                                            {!! Form::close() !!}
+                                                        @endcan
+                                                    </td>
+                                                @endcan
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="commission" class="tab-pane">
+                        <div class="card">
+                            <div class="card-body">
+                                {{Form::open(array('url'=>'commission','method'=>'post'))}}
+                                @csrf
+                                {{ Form::hidden('employee_id',$employee->id, array()) }}
+                                <div class="row">
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-group">
+                                            {{ Form::label('title', __('Title'),['class'=>'form-label']) }}
+                                            {{ Form::text('title',null, array('class' => 'form-control ','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-group">
+                                            {{ Form::label('amount', __('Amount'),['class'=>'form-label']) }}
+                                            {{ Form::number('amount',null, array('class' => 'form-control ','required'=>'required','step'=>'0.01')) }}
+                                        </div>
+                                    </div>
+                                </div>
+                                @can('create commission')
+                                    <div class="row">
+                                        <div class="col-12 text-end mt-1">
+                                            <input type="submit" value="{{__('Save Change')}}" class="btn-create badge-blue">
+                                        </div>
+                                    </div>
+                                @endcan
+                                {{Form::close()}}
+                                <hr>
+                                <div class="table-responsive">
+                                    <table class="table table-striped mb-0" id="commission-dataTable">
+                                        <thead>
+                                        <tr>
+                                            <th>{{__('Employee Name')}}</th>
+                                            <th>{{__('Title')}}</th>
+                                            <th>{{__('Amount')}}</th>
+                                            <th width="200px">{{__('Action')}}</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody class="font-style">
+                                        @foreach ($commissions as $commission)
+                                            <tr>
+                                                <td>{{ $commission->employee()->name }}</td>
+                                                <td>{{ $commission->title }}</td>
+                                                <td>{{  \Auth::user()->priceFormat($commission->amount )}}</td>
+
+                                                <td class="text-end">
+                                                    @can('edit commission')
+                                                        <a href="#" data-url="{{ URL::to('commission/'.$commission->id.'/edit') }}" data-size="lg" data-ajax-popup="true" data-title="{{__('Edit Commission')}}" class="edit-icon" data-toggle="tooltip" data-original-title="{{__('Edit')}}"><i class="ti ti-pencil text-white"></i></a>
+                                                    @endcan
+                                                    @can('delete commission')
+                                                        <a href="#" class="delete-icon" data-toggle="tooltip" data-original-title="{{__('Delete')}}" data-confirm="{{__('Are You Sure?').'|'.__('This action can not be undone. Do you want to continue?')}}" data-confirm-yes="document.getElementById('commission-delete-form-{{$commission->id}}').submit();"><i class="ti ti-trash"></i></a>
+                                                        {!! Form::open(['method' => 'DELETE', 'route' => ['commission.destroy', $commission->id],'id'=>'commission-delete-form-'.$commission->id]) !!}
+                                                        {!! Form::close() !!}
+                                                    @endcan
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="loan" class="tab-pane">
+                        <div class="card">
+                            <div class="card-body">
+                                {{Form::open(array('url'=>'loan','method'=>'post'))}}
+                                @csrf
+                                {{ Form::hidden('employee_id',$employee->id, array()) }}
+                                <div class="row">
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('loan_option', __('Loan Options'),['class'=>'form-label']) }}<span class="text-danger">*</span>
+                                            {{ Form::select('loan_option',$loan_options,null, array('class' => 'form-control select2','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('title', __('Title'),['class'=>'form-label']) }}
+                                            {{ Form::text('title',null, array('class' => 'form-control ','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('amount', __('Loan Amount'),['class'=>'form-label']) }}
+                                            {{ Form::number('amount',null, array('class' => 'form-control ','required'=>'required','step'=>'0.01')) }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('start_date', __('Start Date'),['class'=>'form-label']) }}
+                                            {{ Form::text('start_date',null, array('class' => 'form-control datepicker','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('end_date', __('End Date'),['class'=>'form-label']) }}
+                                            {{ Form::text('end_date',null, array('class' => 'form-control datepicker','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('reason', __('Reason'),['class'=>'form-label']) }}
+                                            {{ Form::textarea('reason',null, array('class' => 'form-control','rows'=>1,'required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @can('create loan')
+                                    <div class="row">
+                                        <div class="col-12 text-end mt-1">
+                                            <input type="submit" value="{{__('Save Change')}}" class="btn-create badge-blue">
+                                        </div>
+                                    </div>
+                                @endcan
+                                {{Form::close()}}
+
+                                <hr>
+
+                                <div class="table-responsive">
+                                    <table class="table table-striped mb-0" id="loan-dataTable">
+                                        <thead>
+                                        <tr>
+                                            <th>{{__('employee')}}</th>
+                                            <th>{{__('Loan Options')}}</th>
+                                            <th>{{__('Title')}}</th>
+                                            <th>{{__('Loan Amount')}}</th>
+                                            <th>{{__('Start Date')}}</th>
+                                            <th>{{__('End Date')}}</th>
+                                            <th width="200px">{{__('Action')}}</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody class="font-style">
+                                        @foreach ($loans as $loan)
+                                            <tr>
+                                                <td>{{ $loan->employee()->name }}</td>
+                                                <td>{{ $loan->loan_option()->name }}</td>
+                                                <td>{{ $loan->title }}</td>
+                                                <td>{{  \Auth::user()->priceFormat($loan->amount) }}</td>
+                                                <td>{{  \Auth::user()->dateFormat($loan->start_date) }}</td>
+                                                <td>{{ \Auth::user()->dateFormat( $loan->end_date) }}</td>
+
+                                                <td class="text-end">
+                                                    @can('edit loan')
+                                                        <a href="#" data-url="{{ URL::to('loan/'.$loan->id.'/edit') }}" data-size="lg" data-ajax-popup="true" data-title="{{__('Edit Loan')}}" class="edit-icon" data-toggle="tooltip" data-original-title="{{__('Edit')}}"><i class="ti ti-pencil text-white"></i></a>
+                                                    @endcan
+                                                    @can('delete loan')
+                                                        <a href="#" class="delete-icon" data-toggle="tooltip" data-original-title="{{__('Delete')}}" data-confirm="{{__('Are You Sure?').'|'.__('This action can not be undone. Do you want to continue?')}}" data-confirm-yes="document.getElementById('loan-delete-form-{{$loan->id}}').submit();"><i class="ti ti-trash"></i></a>
+                                                        {!! Form::open(['method' => 'DELETE', 'route' => ['loan.destroy', $loan->id],'id'=>'loan-delete-form-'.$loan->id]) !!}
+                                                        {!! Form::close() !!}
+                                                    @endcan
+                                                </td>
+
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="saturation-deduction" class="tab-pane">
+                        <div class="card">
+                            <div class="card-body">
+                                {{Form::open(array('url'=>'saturationdeduction','method'=>'post'))}}
+                                @csrf
+                                {{ Form::hidden('employee_id',$employee->id, array()) }}
+                                <div class="row">
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('deduction_option', __('Deduction Options'),['class'=>'form-label']) }}<span class="text-danger">*</span>
+                                            {{ Form::select('deduction_option',$deduction_options,null, array('class' => 'form-control select2','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('title', __('Title'),['class'=>'form-label']) }}
+                                            {{ Form::text('title',null, array('class' => 'form-control ','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-group">
+                                            {{ Form::label('amount', __('Amount'),['class'=>'form-label']) }}
+                                            {{ Form::number('amount',null, array('class' => 'form-control ','required'=>'required','step'=>'0.01')) }}
+                                        </div>
+                                    </div>
+                                </div>
+                                @can('create saturation deduction')
+                                    <div class="row">
+                                        <div class="col-12 text-end mt-1">
+                                            <input type="submit" value="{{__('Save Change')}}" class="btn-create badge-blue">
+                                        </div>
+                                    </div>
+                                @endcan
+                                {{Form::close()}}
+
+                                <hr>
+                                <div class="table-responsive">
+                                    <table class="table table-striped mb-0" id="saturation-deduction-dataTable">
+                                        <thead>
+                                        <tr>
+                                            <th>{{__('Employee Name')}}</th>
+                                            <th>{{__('Deduction Option')}}</th>
+                                            <th>{{__('Title')}}</th>
+                                            <th>{{__('Amount')}}</th>
+                                            <th>{{__('Tax Slab')}}</th>
+                                            <th width="200px">{{__('Action')}}</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody class="font-style">
+                                        @foreach ($saturationdeductions as $saturationdeduction)
+                                            <tr>
+
+                                                <td>{{ $saturationdeduction->employee()->name }}</td>
+                                                <td>{{ $saturationdeduction->deduction_option()->name }}</td>
+                                                <td>{{ $saturationdeduction->title }}</td>
+                                                <td>{{ \Auth::user()->priceFormat( $saturationdeduction->amount )}}</td>
+                                                <td>{{ optional($saturationdeduction->taxSlab)->name }}</td>
+
+                                                <td class="text-end">
+                                                    @can('edit saturation deduction')
+                                                        <a href="#" data-url="{{ URL::to('saturationdeduction/'.$saturationdeduction->id.'/edit') }}" data-size="lg" data-ajax-popup="true" data-title="{{__('Edit Saturation Deduction')}}" class="edit-icon" data-toggle="tooltip" data-original-title="{{__('Edit')}}"><i class="ti ti-pencil text-white"></i></a>
+                                                    @endcan
+                                                    @can('delete saturation deduction')
+                                                        <a href="#" class="delete-icon" data-toggle="tooltip" data-original-title="{{__('Delete')}}" data-confirm="{{__('Are You Sure?').'|'.__('This action can not be undone. Do you want to continue?')}}" data-confirm-yes="document.getElementById('deduction-delete-form-{{$saturationdeduction->id}}').submit();"><i class="ti ti-trash"></i></a>
+                                                        {!! Form::open(['method' => 'DELETE', 'route' => ['saturationdeduction.destroy', $saturationdeduction->id],'id'=>'deduction-delete-form-'.$saturationdeduction->id]) !!}
+                                                        {!! Form::close() !!}
+                                                    @endcan
+                                                </td>
+
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="other-payment" class="tab-pane">
+                        <div class="card">
+                            <div class="card-body">
+                                {{Form::open(array('url'=>'otherpayment','method'=>'post'))}}
+                                @csrf
+                                {{ Form::hidden('employee_id',$employee->id, array()) }}
+                                <div class="row">
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-group">
+                                            {{ Form::label('title', __('Title'),['class'=>'form-label']) }}
+                                            {{ Form::text('title',null, array('class' => 'form-control ','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-group">
+                                            {{ Form::label('amount', __('Amount'),['class'=>'form-label']) }}
+                                            {{ Form::number('amount',null, array('class' => 'form-control ','required'=>'required' ,'step'=>'0.01')) }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @can('create other payment')
+                                    <div class="row">
+                                        <div class="col-12 text-end mt-1">
+                                            <input type="submit" value="{{__('Save Change')}}" class="btn-create badge-blue">
+                                        </div>
+                                    </div>
+                                @endcan
+                                {{Form::close()}}
+
+
+                                <hr>
+                                <div class="table-responsive">
+                                    <table class="table table-striped mb-0" id="other-payment-dataTable">
+                                        <thead>
+                                        <tr>
+                                            <th>{{__('employee')}}</th>
+                                            <th>{{__('Title')}}</th>
+                                            <th>{{__('Amount')}}</th>
+                                            <th width="200px">{{__('Action')}}</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody class="font-style">
+                                        @foreach ($otherpayments as $otherpayment)
+                                            <tr>
+                                                <td>{{ $otherpayment->employee()->name }}</td>
+                                                <td>{{ $otherpayment->title }}</td>
+                                                <td>{{  \Auth::user()->priceFormat($otherpayment->amount )}}</td>
+
+                                                <td class="text-end">
+                                                    @can('edit other payment')
+                                                        <a href="#" data-url="{{ URL::to('otherpayment/'.$otherpayment->id.'/edit') }}" data-size="lg" data-ajax-popup="true" data-title="{{__('Edit Other Payment')}}" class="edit-icon" data-toggle="tooltip" data-original-title="{{__('Edit')}}"><i class="ti ti-pencil text-white"></i></a>
+                                                    @endcan
+                                                    @can('delete other payment')
+                                                        <a href="#" class="delete-icon" data-toggle="tooltip" data-original-title="{{__('Delete')}}" data-confirm="{{__('Are You Sure?').'|'.__('This action can not be undone. Do you want to continue?')}}" data-confirm-yes="document.getElementById('payment-delete-form-{{$otherpayment->id}}').submit();"><i class="ti ti-trash"></i></a>
+                                                        {!! Form::open(['method' => 'DELETE', 'route' => ['otherpayment.destroy', $otherpayment->id],'id'=>'payment-delete-form-'.$otherpayment->id]) !!}
+                                                        {!! Form::close() !!}
+                                                    @endcan
+                                                </td>
+
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="overtime" class="tab-pane">
+                        <div class="card">
+                            <div class="card-body">
+                                {{Form::open(array('url'=>'overtime','method'=>'post'))}}
+                                @csrf
+                                {{ Form::hidden('employee_id',$employee->id, array()) }}
+                                <div class="row">
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-group">
+                                            {{ Form::label('title', __('Overtime Title'),['class'=>'form-label']) }}<span class="text-danger">*</span>
+                                            {{ Form::text('title',null, array('class' => 'form-control ','required'=>'required')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-group">
+                                            {{ Form::label('number_of_days', __('Number of days'),['class'=>'form-label']) }}
+                                            {{ Form::number('number_of_days',null, array('class' => 'form-control ','required'=>'required','step'=>'0.01')) }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-group">
+                                            {{ Form::label('hours', __('Hours'),['class'=>'form-label']) }}
+                                            {{ Form::number('hours',null, array('class' => 'form-control ','required'=>'required','step'=>'0.01')) }}
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-group">
+                                            {{ Form::label('rate', __('Rate'),['class'=>'form-label']) }}
+                                            {{ Form::number('rate',null, array('class' => 'form-control ','required'=>'required','step'=>'0.01')) }}
+                                        </div>
+                                    </div>
+                                </div>
+                                @can('create overtime')
+                                    <div class="row">
+                                        <div class="col-12 text-end mt-1">
+                                            <input type="submit" value="{{__('Save Change')}}" class="btn-create badge-blue">
+                                        </div>
+                                    </div>
+                                @endcan
+                                {{Form::close()}}
+
+                                <hr>
+                                <div class="table-responsive">
+                                    <table class="table table-striped mb-0" id="overtime-dataTable">
+                                        <thead>
+                                        <tr>
+                                            <th>{{__('Employee Name')}}</th>
+                                            <th>{{__('Overtime Title')}}</th>
+                                            <th>{{__('Number of days')}}</th>
+                                            <th>{{__('Hours')}}</th>
+                                            <th>{{__('Rate')}}</th>
+
+                                            <th width="200px">{{__('Action')}}</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody class="font-style">
+                                        @foreach ($overtimes as $overtime)
+                                            <tr>
+                                                <td>{{ $overtime->employee()->name }}</td>
+                                                <td>{{ $overtime->title }}</td>
+                                                <td>{{ $overtime->number_of_days }}</td>
+                                                <td>{{ $overtime->hours }}</td>
+                                                <td>{{ \Auth::user()->priceFormat( $overtime->rate) }}</td>
+
+                                                <td class="text-end">
+                                                    @can('edit overtime')
+                                                        <a href="#" data-url="{{ URL::to('overtime/'.$overtime->id.'/edit') }}" data-size="lg" data-ajax-popup="true" data-title="{{__('Edit OverTime')}}" class="edit-icon" data-toggle="tooltip" data-original-title="{{__('Edit')}}"><i class="ti ti-pencil text-white"></i></a>
+                                                    @endcan
+                                                    @can('delete overtime')
+                                                        <a href="#" class="delete-icon" data-toggle="tooltip" data-original-title="{{__('Delete')}}" data-confirm="{{__('Are You Sure?').'|'.__('This action can not be undone. Do you want to continue?')}}" data-confirm-yes="document.getElementById('overtime-delete-form-{{$overtime->id}}').submit();"><i class="ti ti-trash"></i></a>
+                                                        {!! Form::open(['method' => 'DELETE', 'route' => ['overtime.destroy', $overtime->id],'id'=>'overtime-delete-form-'.$overtime->id]) !!}
+                                                        {!! Form::close() !!}
+                                                    @endcan
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">{{ __('Tax Slabs') }}</h6>
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#taxSlabModal">
+                        <i class="ti ti-plus"></i> {{ __('Add Tax Slab') }}
+                    </button>
+                </div>
+                <div class="card-body">
+                    @if(empty($tax_slabs) || $tax_slabs->isEmpty())
+                        <div class="text-muted">{{ __('No tax slabs defined yet.') }}</div>
+                    @else
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>{{ __('Name') }}</th>
+                                        <th>{{ __('Salary Range') }}</th>
+                                        <th>{{ __('Rate (%)') }}</th>
+                                        <th>{{ __('Actions') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                @foreach($tax_slabs as $tax_slab)
+                                    <tr>
+                                        <td>{{ $tax_slab->name }}</td>
+                                        <td>{{ $tax_slab->min_salary ?? '-' }} - {{ $tax_slab->max_salary ?? '-' }}</td>
+                                        <td>{{ $tax_slab->rate }}</td>
+                                        <td>
+                                            {!! Form::open(['method' => 'DELETE', 'route' => ['taxslab.destroy', $tax_slab->id], 'class' => 'd-inline']) !!}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm="{{ __('Are you sure you want to delete this tax slab?') }}">
+                                                <i class="ti ti-trash"></i>
+                                            </button>
+                                            {!! Form::close() !!}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+@endsection
+
+<div class="modal fade" id="taxSlabModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            {{ Form::open(['route' => 'taxslab.store', 'method' => 'POST']) }}
+            <div class="modal-header">
+                <h5 class="modal-title">{{ __('Add Tax Slab') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    {{ Form::label('name', __('Name'), ['class' => 'form-label']) }}<x-required></x-required>
+                    {{ Form::text('name', null, ['class' => 'form-control', 'required' => 'required']) }}
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        {{ Form::label('min_salary', __('Minimum Salary'), ['class' => 'form-label']) }}
+                        {{ Form::number('min_salary', null, ['class' => 'form-control', 'step' => '0.01']) }}
+                    </div>
+                    <div class="col-md-6">
+                        {{ Form::label('max_salary', __('Maximum Salary'), ['class' => 'form-label']) }}
+                        {{ Form::number('max_salary', null, ['class' => 'form-control', 'step' => '0.01']) }}
+                    </div>
+                </div>
+                <div class="mt-3">
+                    {{ Form::label('rate', __('Rate (%)'), ['class' => 'form-label']) }}<x-required></x-required>
+                    {{ Form::number('rate', null, ['class' => 'form-control', 'step' => '0.01', 'required' => 'required']) }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ __('Cancel') }}</button>
+                <button type="submit" class="btn btn-primary">{{ __('Save') }}</button>
+            </div>
+            {{ Form::close() }}
+        </div>
+    </div>
+</div>
+
+@push('script-page')
+    <script type="text/javascript">
+
+        $(document).ready(function () {
+            var d_id = $('#department_id').val();
+            var designation_id = '{{ $employee->designation_id }}';
+            getDesignation(d_id);
+
+
+            $("#allowance-dataTable").dataTable({
+                "columnDefs": [
+                    {"sortable": false, "targets": [1]}
+                ]
+            });
+
+            $("#commission-dataTable").dataTable({
+                "columnDefs": [
+                    {"sortable": false, "targets": [1]}
+                ]
+            });
+
+            $("#loan-dataTable").dataTable({
+                "columnDefs": [
+                    {"sortable": false, "targets": [1]}
+                ]
+            });
+
+            $("#saturation-deduction-dataTable").dataTable({
+                "columnDefs": [
+                    {"sortable": false, "targets": [1]}
+                ]
+            });
+
+            $("#other-payment-dataTable").dataTable({
+                "columnDefs": [
+                    {"sortable": false, "targets": [1]}
+                ]
+            });
+
+            $("#overtime-dataTable").dataTable({
+                "columnDefs": [
+                    {"sortable": false, "targets": [1]}
+                ]
+            });
+
+
+        });
+
+        $(document).on('change', 'select[name=department_id]', function () {
+            var department_id = $(this).val();
+            getDesignation(department_id);
+        });
+
+        function getDesignation(did) {
+            $.ajax({
+                url: '{{route('employee.json')}}',
+                type: 'POST',
+                data: {
+                    "department_id": did, "_token": "{{ csrf_token() }}",
+                },
+                success: function (data) {
+                    $('#designation_id').empty();
+                    $('#designation_id').append('<option value="">{{__('Select any Designation')}}</option>');
+                    $.each(data, function (key, value) {
+                        var select = '';
+                        if (key == '{{ $employee->designation_id }}') {
+                            select = 'selected';
+                        }
+
+                        $('#designation_id').append('<option value="' + key + '"  ' + select + '>' + value + '</option>');
+                    });
+                }
+            });
+        }
+
+    </script>
+@endpush

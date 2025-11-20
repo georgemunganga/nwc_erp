@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nul)",
+      "Bash(awk:*)",
+      "Bash(find:*)",
+      "Bash(php -r:*)",
+      "Bash(php artisan make:migration:*)",
+      "Bash(php artisan migrate:*)",
+      "Bash(php artisan:*)",
+      "Bash(php:*)",
+      "Bash(index.blade.php)",
+      "Bash(\"c:\\xampp\\htdocs\\amizoerp\\resources\\views\\loan\\index.blade.php\")",
+      "Bash(copy edit.blade.php edit.blade.php.backup)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
