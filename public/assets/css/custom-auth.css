@@ -13,7 +13,7 @@
 .login-left-panel {
     position: relative;
     flex: 1;
-    background: linear-gradient(135deg, #f3661e 0%, #D35400 50%, #BF360C 100%);
+    background: linear-gradient(135deg, #012642 0%, #012642 50%, #012642 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -29,7 +29,7 @@
     right: 0;
     bottom: 0;
     background-image:
-        linear-gradient(rgba(230, 81, 0, 0.85), rgba(191, 54, 12, 0.85)),
+        linear-gradient(#012642, #012642),
         url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23grid)"/></svg>');
     z-index: 1;
 }
@@ -181,22 +181,24 @@
 }
 
 .login-form-content .form-control:focus {
-    border-color: #f3661e;
+    border-color: #f7c600;
     box-shadow: 0 0 0 0.2rem rgba(230, 81, 0, 0.1);
 }
 
 .login-form-content .btn-primary {
     height: 50px;
-    background: linear-gradient(135deg, #f3661e 0%, #D35400 100%);
+    padding-top: 1rem ;
+    padding-bottom: 1rem;
+    background: linear-gradient(135deg, #f7c600 0%, #f7c600 100%);
     border: none;
-    border-radius: 8px;
+    border-radius: 0.75rem;
     font-weight: 600;
     font-size: 16px;
     transition: all 0.3s ease;
 }
 
 .login-form-content .btn-primary:hover {
-    background: linear-gradient(135deg, #D35400 0%, #BF360C 100%);
+    background: linear-gradient(135deg, #f7c600 0%, #f7c600 100%);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(230, 81, 0, 0.3);
 }

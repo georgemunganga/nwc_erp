@@ -16,13 +16,13 @@ return new class extends Migration
         // Add missing columns to deduction_options
         Schema::table('deduction_options', function (Blueprint $table) {
             if (!Schema::hasColumn('deduction_options', 'amount')) {
-                $table->decimal('amount', 15, 2)->nullable()->after('type');
+                $table->decimal('amount', 15, 2)->nullable();
             }
             if (!Schema::hasColumn('deduction_options', 'min_amount')) {
-                $table->decimal('min_amount', 15, 2)->nullable()->after('amount');
+                $table->decimal('min_amount', 15, 2)->nullable();
             }
             if (!Schema::hasColumn('deduction_options', 'max_amount')) {
-                $table->decimal('max_amount', 15, 2)->nullable()->after('min_amount');
+                $table->decimal('max_amount', 15, 2)->nullable();
             }
         });
     }

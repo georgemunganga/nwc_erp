@@ -12,9 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('employees', function (Blueprint $table) {
-            $table->string('nrc_number')->nullable()->after('man_number');
-            $table->string('drivers_license_number')->nullable()->after('nrc_number');
-            $table->string('passport_number')->nullable()->after('drivers_license_number');
+            $table->string('nrc_number')->nullable();
+            $table->string('drivers_license_number')->nullable();
+            $table->string('passport_number')->nullable();
         });
     }
 
